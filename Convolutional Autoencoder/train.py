@@ -62,24 +62,37 @@ def weight_variable(shape, name):
 def bias_variable(shape, name):
     initial = tf.constant(0.1, shape = shape)
     return tf.Variable(initial, name)
-
+'''
 def conv2d(x, W):
     return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding = 'SAME')
+'''
 
-def deconv2d(x, W, output_shape):
+def conv2d_layer(x, W_shape, b_shape, name, padding='SAME'):
+    W = weight_variable(W_shape, name+'_W')
+    b = bias_variable([b_shape], name+'_b')
+    return tf.nn.relu(tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding=padding) + b)
+'''
+def deconv2d_(x, W, output_shape):
     return tf.nn.conv2d_transpose(x, W, output_shape, strides = [1, 1, 1, 1], padding = 'SAME')
+ '''   
+def deconv_layer(x, W_shape, b_shape, name, padding='SAME'):
+    W = weight_variable(W_shape, name+'_W')
+    b = bias_variable([b_shape], name+'_b')
+    x_shape = tf.shape(x)
+    out_shape = tf.stack([x_shape[0], x_shape[1], x_shape[2], W_shape[2]])
+    return tf.nn.conv2d_transpose(x, W, out_shape, [1, 1, 1, 1], padding=padding) + b
 
-def max_pool_2x2(x):
+def max_pool_2x2_layer(x):
     #_, argmax = tf.nn.max_pool_with_argmax(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding = 'SAME')
     pool = tf.nn.max_pool(x, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
     return pool
 
-def max_unpool_2x2(x, shape): # input shape
+def max_unpool_2x2_layer(x, shape): # input shape
     inference = tf.image.resize_nearest_neighbor(x, tf.stack([shape[1]*2, shape[2]*2]))
     return inference
 
 
-# In[5]:
+# In[7]:
 
 
 
@@ -89,40 +102,49 @@ y = tf.placeholder(tf.float32, shape = [None, 256*256], name='y')
 x_origin = tf.reshape(x, [-1, 256, 256, 1])
 y_origin = tf.reshape(y, [-1, 256, 256, 1])
 
-# conv1 256,1 > 256,64
-W_e_conv1 = weight_variable([5, 5, 1, 64], "w_e_conv1") # filter, channel, features
-b_e_conv1 = bias_variable([64], "b_e_conv1")
-h_e_conv1 = tf.nn.relu(tf.add(conv2d(x_origin, W_e_conv1), b_e_conv1))
-# pool1 256,64 > 128,64
-h_e_pool1 = max_pool_2x2(h_e_conv1)
+# conv1 256
+conv_1_1 = conv2d_layer(x_origin, [5, 5, 1, 64], 64, "conv_1_1", padding='SAME')
+conv_1_2 = conv2d_layer(conv_1_1, [5, 5, 64, 64], 64, "conv_1_2", padding='SAME')
+# pool1 256 > 128
+pool_1 = max_pool_2x2_layer(conv_1_2)
 
-# conv2 128,64 > 128,128
-W_e_conv2 = weight_variable([5, 5, 64, 128], "w_e_conv2")
-b_e_conv2 = bias_variable([128], "b_e_conv2")
-h_e_conv2 = tf.nn.relu(tf.add(conv2d(h_e_pool1, W_e_conv2), b_e_conv2))
-# pool2 128,128 > 64,128
-h_e_pool2 = max_pool_2x2(h_e_conv2)
+# conv2 128
+conv_2_1 = conv2d_layer(pool_1, [5, 5, 64, 128], 128, "conv_2_1", padding='SAME')
+conv_2_2 = conv2d_layer(conv_2_1, [5, 5, 128, 128], 128, "conv_2_2", padding='SAME')
+# pool2 128> 64
+pool_2 = max_pool_2x2_layer(conv_2_2)
 
-# code 64,128
-code_layer = h_e_pool2
+# conv3 64
+conv_3_1 = conv2d_layer(pool_2, [5, 5, 128, 256], 256, "conv_3_1", padding='SAME')
+conv_3_2 = conv2d_layer(conv_3_1, [5, 5, 256, 256], 256, "conv_3_2", padding='SAME')
+# pool3 64 > 32
+pool_3 = max_pool_2x2_layer(conv_3_2)
 
-# deconv1 64,128 > 64,64
-W_d_conv1 = weight_variable([5, 5, 64, 128], "w_d_conv1")
-output_shape_d_conv1 = tf.stack([tf.shape(x)[0], 64, 64, 64])
-h_d_conv1 = tf.nn.sigmoid(deconv2d(code_layer, W_d_conv1, output_shape_d_conv1))
-# unpool1 64,64 > 128,64
-h_d_pool1 = max_unpool_2x2(h_d_conv1, [-1, 64, 64, 64]) # input size
+# code 16,512
+code_layer = pool_3
 
-# deconv2 128,64 > 128,1
-W_d_conv2 = weight_variable([5, 5, 1, 64], "w_d_conv2")
-output_shape_d_conv2 = tf.stack([tf.shape(x)[0], 128, 128, 1])
-h_d_conv2 = tf.nn.sigmoid(deconv2d(h_d_pool1, W_d_conv2, output_shape_d_conv2))
-# unpool 2 128,1 > 256,1
-h_d_pool2 = max_unpool_2x2(h_d_conv2, [-1, 128, 128, 1])
+# deconv3 32
+deconv_3_2 = deconv_layer(code_layer, [5, 5, 256, 256], 256, 'deconv_3_2', padding='SAME')
+deconv_3_1 = deconv_layer(deconv_3_2, [5, 5, 128, 256], 128, 'deconv_3_1', padding='SAME')
+# unpool3 32 > 64
+unpool_3 = max_unpool_2x2_layer(deconv_3_1, [-1, 32, 32, 128])    
 
-x_reconstruct = h_d_pool2
+# deconv2 64
+deconv_2_2 = deconv_layer(unpool_3, [5, 5, 128, 128], 128, 'deconv_2_2', padding='SAME')
+deconv_2_1 = deconv_layer(deconv_2_2, [5, 5, 64, 128], 64, 'deconv_2_1', padding='SAME')
+# unpool2 64 > 128
+unpool_2 = max_unpool_2x2_layer(deconv_2_1, [-1, 64, 64, 64])
+
+# deconv1 128
+deconv_1_2 = deconv_layer(unpool_2, [5, 5, 64, 64], 64, 'deconv_1_2', padding='SAME')
+deconv_1_1 = deconv_layer(deconv_1_2, [5, 5, 1, 64], 1, 'deconv_1_1', padding='SAME')
+# unpool1 128 > 256
+unpool_1 = max_unpool_2x2_layer(deconv_1_1, [-1, 128, 128, 1])
+
+x_reconstruct = unpool_1
 
 result = tf.sigmoid(x_reconstruct, name='result')
+result_round = tf.round(x_reconstruct, name='result_round')
 
 print("input layer shape : %s" % x_origin.get_shape())
 print("code layer shape : %s" % code_layer.get_shape())
@@ -134,6 +156,12 @@ with tf.name_scope('loss'):
     cost = tf.sqrt(tf.reduce_mean(tf.square(y_origin - result)))
     tf.summary.scalar('loss', cost)
 optimizer = tf.train.AdamOptimizer(1e-4).minimize(cost)
+
+with tf.name_scope('accuracy'):
+    argmax_probs = tf.round(result)  # 0x1
+    correct_pred = tf.cast(tf.equal(argmax_probs, y_origin), tf.float32)
+    accuracy = tf.reduce_mean(correct_pred)
+    tf.summary.scalar('accuracy', accuracy)
 
 
 # In[6]:
@@ -147,7 +175,7 @@ optimizer = tf.train.AdamOptimizer(1e-4).minimize(cost)
 #sess = tf.InteractiveSession()
 w1 = tf.placeholder("float", name="w1")
 
-batch_size = 60
+batch_size = 10
 
 with tf.Session() as sess:
     # logs
@@ -165,8 +193,8 @@ with tf.Session() as sess:
             rs = sess.run(merged,feed_dict={x:batch_x, y:batch_y})
             writer.add_summary(rs, i)
         if i%100 == 0: # print loss
-            print("step %d, loss %g"%(i, cost.eval(feed_dict={x:batch_x, y:batch_y})))
-        if i == 5000-1: # save
+            print("step %d, loss %g, accuracy %g"%(i, cost.eval(feed_dict={x:batch_x, y:batch_y}), accuracy.eval(feed_dict={x:batch_x, y:batch_y})))
+        if (i+1)%1000 == 0: # save
             saver.save(sess, 'save/model.ckpt')
             print('model saved')
 
