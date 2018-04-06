@@ -161,7 +161,7 @@ for i in range(5000):
         writer.add_summary(rs, i)
     if i%100 == 0: # print loss
         print("step %d, loss %g"%(i, cost.eval(feed_dict={x:batch_x, y:batch_y})))
-    if i%1000 == 0 & i >= 1000: # save
+    if i%1000 == 0: # save
         save_path = saver.save(sess, 'save/' + str(i) + '.ckpt')
         print('model saved')
 
