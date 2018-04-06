@@ -42,8 +42,8 @@ def next_batch(batch_size):
     
     for i in range(batch_size):
         f = random.choice(filenames)
-        img = np.array(cv2.imread('./data/x/' + f, 0))
-        img2 = np.array(cv2.imread('./data/y/' + f, 0))
+        img = np.array(cv2.imread('./data/x/' + f, 0)) /255
+        img2 = np.array(cv2.imread('./data/y/' + f, 0)) /255
         X[i, :, :] = img
         Y[i, :, :] = img2
     
@@ -120,8 +120,24 @@ conv_3_2 = conv2d_layer(conv_3_1, [5, 5, 256, 256], 256, "conv_3_2", padding='SA
 # pool3 64 > 32
 pool_3 = max_pool_2x2_layer(conv_3_2)
 
+'''
+# conv4 32
+conv_4_1 = conv2d_layer(pool_3, [5, 5, 256, 512], 512, "conv_4_1", padding='SAME')
+conv_4_2 = conv2d_layer(conv_4_1, [5, 5, 512, 512], 512, "conv_4_2", padding='SAME')
+# pool4 32 > 16
+pool_4 = max_pool_2x2_layer(conv_4_2)
+
+'''
 # code 16,512
 code_layer = pool_3
+
+'''
+# deconv4 16
+deconv_4_2 = deconv_layer(code_layer, [5, 5, 512, 512], 512, 'deconv_4_2', padding='SAME')
+deconv_4_1 = deconv_layer(deconv_4_2, [5, 5, 256, 512], 256, 'deconv_4_1', padding='SAME')
+# unpool4 16 > 32
+unpool_4 = max_unpool_2x2_layer(deconv_4_1, [-1, 16, 16, 256]) 
+'''
 
 # deconv3 32
 deconv_3_2 = deconv_layer(code_layer, [5, 5, 256, 256], 256, 'deconv_3_2', padding='SAME')
